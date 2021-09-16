@@ -1,4 +1,4 @@
-package ch03
+// package ch03
 
 enum List[+A]:
     case Nil
@@ -17,6 +17,21 @@ object List {
   def apply[A](as: A*): List[A] =
     if as.isEmpty then Nil
     else Cons(as.head, apply(as.tail*))
+
+  def tail[A](as: List[A]): List[A] = as match
+    case Cons(_, t) => t
+    case Nil        => sys.error("tail on empty list")
+
+  def setHead[A](as: List[A], hd: A): List[A] = as match
+    case Cons(_, tl) => Cons(hd, tl)
+    case Nil         => sys.error("setHead on empty list")
+
+  def drop[A](as: List[A], n: Int): List[A] =
+    if n <= 0 then as
+    else as match
+      case Cons(_, tl) => drop(tl, n - 1)
+      case Nil         => Nil
+
 
   @main
   def run: Unit =
