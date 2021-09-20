@@ -1,4 +1,4 @@
-// package ch03
+package ch03
 
 enum List[+A]:
     case Nil
@@ -122,6 +122,16 @@ object List {
 
     reverse(go(a, b, Nil))
 
+  def startsWith[A](l: List[A], pre: List[A]): Boolean = (l, pre) match
+    case (_, Nil)                                 => true
+    case (Cons(h1, t1), Cons(h2, t2)) if h1 == h2 => startsWith(t1, t2)
+    case _                                        => false
+
+  def hasSubsequence[A](sup: List[A], sub: List[A]): Boolean = sup match
+    case Nil                       => sub == Nil
+    case _ if startsWith(sup, sub) => true
+    case Cons(_, t)                => hasSubsequence(t, sub)
+
   @main
   def run: Unit =
     val l1 = List(1, 2, 3)
@@ -142,3 +152,4 @@ object List {
     println(s"concat   of $l3 = ${concat(l3)}")
     println(s"concatfR of $l3 = ${concatfR(l3)}")
 }
+
