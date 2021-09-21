@@ -4,7 +4,7 @@ enum List[+A]:
     case Nil
     case Cons(head: A, tail: List[A])
 
-object List {
+object List:
   def sum(ints: List[Int]): Int = ints match
     case Nil => 0
     case Cons(x, xs) => x + sum(xs)
@@ -151,5 +151,24 @@ object List {
     println(s"reverse  of $l1 = ${reverse(l1)}")
     println(s"concat   of $l3 = ${concat(l3)}")
     println(s"concatfR of $l3 = ${concatfR(l3)}")
-}
 
+enum Tree[+A]:
+  case Leaf(value: A)
+  case Branch(left: Tree[A], right: Tree[A])
+
+  def size: Int = this match
+    case Leaf(_)      => 1
+    case Branch(l, r) => 1 + l.size + r.size
+
+object Tree:
+  extension (t: Tree[Int]) def firstPositive: Option[Int] = t match
+    case Leaf(i)      => if i > 0 then Some(i) else None
+    case Branch(l, r) => l.firstPositive orElse r.firstPositive
+
+  @main
+  def runTree: Unit =
+    val t1 = Branch(Leaf(1), Branch(Leaf(2), Leaf(3)))
+  
+    println(s"t1: $t1")
+    println(s"t1: ${t1.size}")
+    println(s"t1: ${t1.firstPositive}")
