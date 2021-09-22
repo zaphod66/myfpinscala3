@@ -160,15 +160,49 @@ enum Tree[+A]:
     case Leaf(_)      => 1
     case Branch(l, r) => 1 + l.size + r.size
 
+  def depth: Int = this match
+    case Leaf(_)      => 0
+    case Branch(l, r) => 1 + (l.depth max r.depth)
+
+  def map[B](f: A => B): Tree[B] = this match
+    case Leaf(a)      => Leaf(f(a))
+    case Branch(l, r) => Branch(l.map(f), r.map(f))
+
+  def fold[B](f: A => B, g: (B ,B) => B): B = this match
+    case Leaf(a)      => f(a)
+    case Branch(l, r) => g(l.fold(f, g), r.fold(f, g))
+
+//  def sizeWithFold: Int = this.fold(_ => 1, 1 + _ + _)
+  def sizeWithFold: Int = fold(_ => 1, (l, r) => 1 + l + r)
+  def depthWithFold: Int = fold(_ => 0, (l, r) => 1 + l max r)
+  def mapWithFold[B](f: A => B): Tree[B] = fold(a => Leaf(f(a)), Branch(_, _))
+
 object Tree:
   extension (t: Tree[Int]) def firstPositive: Option[Int] = t match
     case Leaf(i)      => if i > 0 then Some(i) else None
     case Branch(l, r) => l.firstPositive orElse r.firstPositive
 
+  extension (t: Tree[Int]) def maximum: Int = t match
+    case Leaf(n)      => n
+    case Branch(l, r) => l.maximum max r.maximum
+
+  extension (t: Tree[Int]) def maximumWithFold: Int = t.fold(identity, _ max _)
+
   @main
   def runTree: Unit =
     val t1 = Branch(Leaf(1), Branch(Leaf(2), Leaf(3)))
   
-    println(s"t1: $t1")
-    println(s"t1: ${t1.size}")
-    println(s"t1: ${t1.firstPositive}")
+    println(s"t1:    $t1")
+    println(s"t1:    ${t1.size}")
+    println(s"t1 fp: ${t1.firstPositive}")
+    println(s"t1 mx: ${t1.maximum}")
+    println(s"t1 de: ${t1.depth}")
+    println(s"t1 fd: ${t1.fold(identity, _ + _)}")
+    
+
+    val t2 = t1.map(_ + 1)
+    val t3 = t1.mapWithFold(_ + 1)
+
+    println(s"t2:    $t2")
+    println(s"t3:    $t3")
+
