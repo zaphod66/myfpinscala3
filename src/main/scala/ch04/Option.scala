@@ -57,8 +57,8 @@ object Option:
     a.flatMap(aa => b.map(bb => f(aa, bb)))
 
   def sequence[A](as: List[Option[A]]): Option[List[A]] = as match
-    case Nil      => Some(Nil)
-    case (h :: t) => h.flatMap(hh => sequence(t).map(tt => hh :: tt))
+    case Nil    => Some(Nil)
+    case h :: t => h.flatMap(hh => sequence(t).map(tt => hh :: tt))
 
   def sequence2[A](as: List[Option[A]]): Option[List[A]] =
     as.foldRight(Some(Nil): Option[List[A]])((a, acc) => map2(a, acc)((h, t) => h :: t))
