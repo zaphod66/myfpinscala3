@@ -1,5 +1,7 @@
 package ch05
 
+import scala.{LazyList => _}
+
 import LazyList.*
 
 enum LazyList[+A]:
@@ -23,7 +25,7 @@ enum LazyList[+A]:
 
   def take(n: Int): LazyList[A] = this match
     case Cons(h, t) if n > 1  => cons(h(), t().take(n - 1))
-    case Cons(h, t) if n == 0 => cons(h(), empty)
+    case Cons(h, _) if n == 1 => cons(h(), empty)
     case _                    => empty
 
   @annotation.tailrec
@@ -88,6 +90,8 @@ object LazyList:
     if as.isEmpty then empty
     else cons(as.head, apply(as.tail*))
 
+  val ones: LazyList[Int] = LazyList.cons(1, ones)
+
   @main
   def TestLazyList: Unit =
     def printLL[A](str: String, ll: LazyList[A]): Unit =
@@ -106,3 +110,6 @@ object LazyList:
     printLL("ll4", ll4)
     printLL("ll5", ll5)
     printLL("ll6", ll6)
+
+    println(s"take   ${ones.take(5).toList}")
+    println(s"forAll ${ones.forAll(_ != 1)}")
