@@ -90,7 +90,30 @@ object LazyList:
     if as.isEmpty then empty
     else cons(as.head, apply(as.tail*))
 
-  val ones: LazyList[Int] = LazyList.cons(1, ones)
+  val ones: LazyList[Int] = cons(1, ones)
+
+  def continually[A](a: A): LazyList[A] =
+    lazy val single: LazyList[A] = cons(a, single)
+    single
+
+  def from(n: Int): LazyList[Int] = cons(n, from(n + 1))
+
+  def fibs: LazyList[Int] =
+    def go(current: Int, next: Int): LazyList[Int] =
+      cons(current, go(next, current + next))
+  
+    go(0, 1)
+
+  def unfold[A, S](state: S)(f: S => Option[(A, S)]): LazyList[A] =
+    f(state).fold(empty)((a, s) => cons(a, unfold(s)(f)))
+
+  def fibs2: LazyList[Int] = unfold((0, 1))((c, n) => Some(c, (n, c + n)))
+  
+  def from2(n: Int): LazyList[Int] = unfold(n)(s => Some(s, s + 1))
+  
+  def ones2: LazyList[Int] = unfold(())(_ => Some(1, ()))
+
+  def continually2[A](a: A): LazyList[A] = unfold(())(_ => Some(a, ()))
 
   @main
   def TestLazyList: Unit =
@@ -113,3 +136,10 @@ object LazyList:
 
     println(s"take   ${ones.take(5).toList}")
     println(s"forAll ${ones.forAll(_ != 1)}")
+    println(s"fibs   ${fibs.take(9).toList}")
+    println(s"fibs2  ${fibs2.take(9).toList}")
+    println(s"from2  ${from2(3).take(9).toList}")
+    
+
+    val ll7 = unfold(1)(s => Some(s.toString, s + 2))
+    println(s"ll7    ${ll7.take(5).toList}")
