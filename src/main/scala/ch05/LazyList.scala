@@ -78,6 +78,65 @@ enum LazyList[+A]:
   // so find terminates as soon as a match is found:
   def find(p: A => Boolean): Option[A] = filter(p).headOption
 
+  def mapViaUnfold[B](f: A => B): LazyList[B] =
+    unfold(this) { s => s match
+      case Empty      => None
+      case Cons(h, t) => Some((f(h()), t()))
+    }
+
+  def takeViaUnfold(n: Int): LazyList[A] =
+    unfold((this, n)) {
+      case (Cons(h, t), 1) => Some(h(), (empty, 0))
+      case (Cons(h, t), n) => Some(h(), (t(), n - 1))
+      case _               => None
+    }
+
+  def takeWhileViaUnfold(p: A => Boolean): LazyList[A] =
+    unfold(this) {
+      case Cons(h, t) if p(h()) => Some(h(), t())
+      case _                    => None
+    }
+
+  def zipAll[B](that: LazyList[B]): LazyList[(Option[A], Option[B])] =
+     unfold((this, that)) {
+       case (Cons(h1, t1), Cons(h2, t2)) => Some( ((Some(h1()), Some(h2())), (t1(), t2()))  )
+       case (Cons(h1, t1), Empty)        => Some( ((Some(h1()),  None)     , (t1(), Empty)) )
+       case (Empty,        Cons(h2, t2)) => Some( ((None, Some(h2()))      , (Empty, t2())) )
+       case (Empty,        Empty)        => None
+  }
+
+  def zipWith[B, C](that: LazyList[B])(f: (A, B) => C): LazyList[C] =
+     unfold((this, that)) {
+       case (Cons(h1, t1), Cons(h2, t2)) => Some( (f(h1(), h2()), (t1(), t2()) ))
+       case _ => None
+  }
+
+  def zip[B](that: LazyList[B]): LazyList[(A, B)] =
+    zipWith(that)((_, _))
+
+  def startsWith[AA >: A](prefix: LazyList[AA]): Boolean =
+    zipAll(prefix).takeWhile(_._2.isDefined).forAll( pair => pair._1 == pair._2)
+
+  def tails: LazyList[LazyList[A]] =
+    unfold(this){
+      case Empty      => None
+      case Cons(h, t) => Some( (cons(h(), t()), t()) )
+    }.append(LazyList(empty))
+
+  def hasSubsequence[AA >: A](pre: LazyList[AA]): Boolean =
+    tails.exists(_.startsWith(pre))
+
+  // Copy of the answer...
+  // The function can't be implemented using `unfold`, since `unfold` generates elements of the `LazyList` from left to right. It can be implemented using `foldRight` though.
+  // The implementation is just a `foldRight` that keeps the accumulated value and the lazy list of intermediate results, which we `cons` onto during each iteration. When writing folds, it's common to have more state in the fold than is needed to compute the result. Here, we simply extract the accumulated list once finished.
+  def scanRight[B](init: B)(f: (A, => B) => B): LazyList[B] =
+    foldRight(init -> LazyList(init)) { (a, b0) =>
+      // b0 is passed by-name and used in by-name args in f and cons. So use lazy val to ensure only one evaluation...
+      lazy val b1 = b0
+      val b2 = f(a, b1._1)
+      (b2, cons(b2, b1._2))
+    }._2
+
 object LazyList:
   def cons[A](hd: => A, tl: => LazyList[A]): LazyList[A] =
     lazy val h = hd
@@ -111,7 +170,7 @@ object LazyList:
   
   def from2(n: Int): LazyList[Int] = unfold(n)(s => Some(s, s + 1))
   
-  def ones2: LazyList[Int] = unfold(())(_ => Some(1, ()))
+  def ones2: LazyList[Int] = continually2(1) // unfold(())(_ => Some(1, ()))
 
   def continually2[A](a: A): LazyList[A] = unfold(())(_ => Some(a, ()))
 
@@ -121,7 +180,7 @@ object LazyList:
       println(s"$str - ${ll.toList}")
 
     val ll1 = LazyList(1, 2, 3, 4)
-    val ll2 = LazyList(5, 6, 7, 8)
+    val ll2 = LazyList(5, 6, 7)
     val ll3 = ll1.append(ll2)
     val ll4 = ll3.filter(_ % 2 == 0)
     val ll5 = ll3.map(_ + 1)
@@ -134,12 +193,20 @@ object LazyList:
     printLL("ll5", ll5)
     printLL("ll6", ll6)
 
-    println(s"take   ${ones.take(5).toList}")
-    println(s"forAll ${ones.forAll(_ != 1)}")
-    println(s"fibs   ${fibs.take(9).toList}")
-    println(s"fibs2  ${fibs2.take(9).toList}")
-    println(s"from2  ${from2(3).take(9).toList}")
-    
+    println(s"take    ${ones.take(5).toList}")
+    println(s"ones2   ${ones2.take(5).toList}")
+    println(s"cont2   ${continually2('a').take(5).toList}")
+    println(s"forAll  ${ones.forAll(_ != 1)}")
+    println(s"fibs    ${fibs.take(9).toList}")
+    println(s"fibs2   ${fibs2.take(9).toList}")
+    println(s"from2   ${from2(3).take(9).toList}")
+    println(s"zip     ${ll1.zip(ll2).toList}")
+    println(s"zipWith ${ll1.zipWith(ll2)(_ + _).toList}")
+    println(s"zipAll  ${ll1.zipAll(ll2).toList}")
+    println(s"tails   ${ll1.tails.map(_.toList).toList}")
+    println(s"hasSub  ${ll1.hasSubsequence(ll1.drop(2))}")
+    println(s"hasSub  ${ll1.hasSubsequence(ll2)}")
+    println(s"scanR   ${ll1.scanRight(0)(_ + _).toList}")
 
     val ll7 = unfold(1)(s => Some(s.toString, s + 2))
-    println(s"ll7    ${ll7.take(5).toList}")
+    println(s"ll7     ${ll7.take(5).toList}")
