@@ -78,6 +78,12 @@ enum LazyList[+A]:
   // so find terminates as soon as a match is found:
   def find(p: A => Boolean): Option[A] = filter(p).headOption
 
+  final def find2(p: A => Boolean): Option[A] = this match
+    case Empty      => None
+    case Cons(h, t) =>
+      val hh = h()
+      if (p(hh)) then Some(hh) else t().find2(p)
+
   def mapViaUnfold[B](f: A => B): LazyList[B] =
     unfold(this) { s => s match
       case Empty      => None
@@ -176,8 +182,6 @@ object LazyList:
 
   @main
   def TestLazyList: Unit =
-    def printLL[A](str: String, ll: LazyList[A]): Unit =
-      println(s"$str - ${ll.toList}")
 
     val ll1 = LazyList(1, 2, 3, 4)
     val ll2 = LazyList(5, 6, 7)
@@ -186,17 +190,18 @@ object LazyList:
     val ll5 = ll3.map(_ + 1)
     val ll6 = ll3.flatMap(i => LazyList(i, i + 10))
 
-    printLL("ll1", ll1)
-    printLL("ll2", ll2)
-    printLL("ll3", ll3)
-    printLL("ll4", ll4)
-    printLL("ll5", ll5)
-    printLL("ll6", ll6)
+    println(s"ll1     ${ll1.toList}")
+    println(s"ll2     ${ll2.toList}")
+    println(s"ll3     ${ll3.toList}")
+    println(s"ll4     ${ll4.toList}")
+    println(s"ll5     ${ll5.toList}")
+    println(s"ll6     ${ll6.toList}")
 
     println(s"take    ${ones.take(5).toList}")
     println(s"ones2   ${ones2.take(5).toList}")
     println(s"cont2   ${continually2('a').take(5).toList}")
     println(s"forAll  ${ones.forAll(_ != 1)}")
+    println(s"forAll- ${from(1).forAll(_ < 100)}")
     println(s"fibs    ${fibs.take(9).toList}")
     println(s"fibs2   ${fibs2.take(9).toList}")
     println(s"from2   ${from2(3).take(9).toList}")
@@ -210,3 +215,6 @@ object LazyList:
 
     val ll7 = unfold(1)(s => Some(s.toString, s + 2))
     println(s"ll7     ${ll7.take(5).toList}")
+
+    println(s"find    ${ll1.find(_ == 2)}")
+    println(s"find2   ${ll1.find2(_ == 2)}")
