@@ -85,3 +85,18 @@ object RNG:
 
   def randDoubleInt: Rand[(Double, Int)] =
     both(double2, int)
+
+  def sequence[A](rs: List[Rand[A]]): Rand[List[A]] =
+    def go(xs: List[Rand[A]], acc: Rand[List[A]]): Rand[List[A]] = xs match
+      case Nil       => acc
+      case ra :: ras =>
+        val acc2 = map2(ra, acc)(_ :: _)
+        go(ras, acc2)
+
+    go(rs, unit(List.empty[A]))
+
+  def sequenceBook[A](rs: List[Rand[A]]): Rand[List[A]] =
+    rs.foldRight(unit(List.empty[A]))((r,acc) => map2(r, acc)(_ :: _))
+
+  def ints2(count: Int): Rand[List[Int]] =
+    sequence(List.fill(count)(int))
