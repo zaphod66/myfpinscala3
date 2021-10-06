@@ -121,4 +121,93 @@ object RNG:
 
   ////////////////////////////////
 
-  type State[S, +A] = S => (A, S)
+  // case class State[S, +A](run: S => (A, S))
+
+  opaque type State[S, +A] = S => (A, S)
+
+  object State:
+    extension [S, A](underlying: State[S, A])
+      def run(s: S): (A, S) = underlying(s)
+
+      def map[B](f: A => B): State[S, B] = flatMap(a => unit(f(a)))
+
+      def _map2[B, C](sb: State[S, B])(f: (A, B) => C): State[S, C] = s0 =>
+        val (a, s1) = underlying(s0)
+        val (b, s2) = sb(s1)
+        (f(a, b), s2)
+
+      def map2[B, C](sb: State[S, B])(f: (A, B) => C): State[S, C] =
+        for
+          a <- underlying
+          b <- sb
+        yield f(a, b)
+
+      def flatMap[B](f: A => State[S, B]): State[S, B] = s0 =>
+        val (a, s1) = underlying(s0)
+        f(a)(s1)
+
+    def apply[S, A](f: S => (A, S)): State[S, A] = f
+
+    def unit[S, A](a: A): State[S, A] = s => (a, s)
+
+    def sequence[S, A](states: List[State[S, A]]): State[S, List[A]] =
+      states.foldRight(unit(List.empty[A]))((s, acc) => s.map2(acc)(_ :: _))
+
+    def traverse[S, A, B](as: List[A])(f: A => State[S, B]): State[S, List[B]] =
+      as.foldRight(unit(List.empty[B]))((a, acc) => f(a)._map2(acc)(_ :: _))
+    
+    def get[S]: State[S, S] = s => (s, s)
+
+    def set[S](s: S): State[S, Unit] = _ => ((), s)
+    
+    def modify[S](f: S => S): State[S, Unit] =
+      for
+        s <- get
+        _ <- set(f(s))
+      yield ()
+    
+    ////////////////////////////////
+
+    enum Input:
+      case Coin, Turn
+
+    case class Machine(locked: Boolean, candies: Int, coins: Int)
+
+    def update(i: Input)(s: Machine): Machine = (i, s) match
+      case (_, Machine(_, 0, _))                        => s
+      case (Input.Coin, Machine(false, _, _))           => s
+      case (Input.Turn, Machine(true, _, _))            => s
+      case (Input.Coin, Machine(true, candies, coins))  => Machine(false, candies, coins + 1)
+      case (Input.Turn, Machine(false, candies, coins)) => Machine(true, candies - 1, coins)
+    //   case _                                            => s
+
+    def simulateMachine(inputs: List[Input]): State[Machine, (Int, Int)] =
+      for
+        _ <- State.traverse(inputs)(i => State.modify(update(i)))
+        s <- State.get
+      yield (s.coins, s.candies)
+
+    ////////////////////////////////
+    
+    @main
+    def run: Unit =
+      type Rnd[A] = State[RNG, A]
+
+      val ns: Rnd[List[Int]] =
+        for
+          x <- nonNegativeLessThan(20)
+          y <- nonNegativeLessThan(1000)
+          xs <- ints(x).map{ xs => xs.map( Math.abs ) }
+        yield xs.map(_ % y)
+    
+      val simple = Simple(15)
+      val ls = ns(simple)._1
+
+      println(s"ls: $ls")
+
+      val inputs = ints(20).map(l => l.map(_ % 2).map(i => if (i % 2 == 0) Input.Coin else Input.Turn))(simple)._1
+
+      val (coins, candies) = simulateMachine(inputs).run(Machine(true, 10, 0))._1
+
+      println(s"inputs: $inputs")
+      println(s"candies: $candies, coins: $coins")
