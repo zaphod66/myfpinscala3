@@ -7,7 +7,7 @@ opaque type Par[A] = ExecutorService => Future[A]
 object Par:
   extension [A](pa: Par[A]) def run(s: ExecutorService): Future[A] = pa(s)
 
-  def unit[A](a: A): Par[A] = es => UnitFuture(a)
+  def unit[A](a: A): Par[A] = _ => UnitFuture(a)
 
   private case class UnitFuture[A](get: A) extends Future[A]:
     def isDone = true
@@ -56,6 +56,9 @@ object Par:
 
   def lazyUnit[A](a: => A): Par[A] = fork(unit(a))
 
+  def delay[A](pa: => Par[A]): Par[A] =
+    es => pa(es)
+  
   def asyncF[A, B](f: A => B): A => Par[B] = a => lazyUnit(f(a))
 
   def parSum(ints: List[Int]): Par[Int] =
@@ -84,6 +87,8 @@ object Par:
       ppas.map(_.flatten)
     }
 
+  def equal[A](es: ExecutorService)(p1: Par[A], p2: Par[A]): Boolean =
+    p1(es).get == p2(es).get
 
   def sequenceBalanced[A](pas: IndexedSeq[Par[A]]): Par[IndexedSeq[A]] =
     if pas.isEmpty then unit(IndexedSeq.empty[A])
@@ -131,3 +136,13 @@ object Par:
     println(s"parMap: ${sl2.take(5)}")
 
     es.shutdown
+
+    // val ftp1 = Executors.newFixedThreadPool(1)
+
+    // val lazyVal = lazyUnit(42)
+
+    // println(s"Deadlock?")
+    // val eq = Par.equal(ftp1)(lazyVal, fork { lazyVal })
+    // println(s"No! $eq")
+    
+    // ftp1.shutdown
