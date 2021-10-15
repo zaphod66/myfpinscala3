@@ -129,11 +129,16 @@ object Par:
 
     println(s"s1: $s1, s2: $s2")
 
-    val l2 = List.fill(1000)(1)
+    val l2  = List.fill(1000)(1)
     val pl2 = Par.parMap(l2)(_.toString)
-    val sl2 = pl2.run(es).get
+    val rl2 = pl2.run(es).get
 
-    println(s"parMap: ${sl2.take(5)}")
+    val l3  = List.range(1, 1000)
+    val pl3 = Par.parMap(l3)(math.sqrt(_))
+    val rl3 = pl3.run(es).get
+
+    println(s"parMap: ${rl2.take(5)}")
+    println(s"parMap: ${rl3.take(5)}")
 
     es.shutdown
 

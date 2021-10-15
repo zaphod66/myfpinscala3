@@ -18,7 +18,7 @@ object Nonblocking:
       latch.await
       ref.get
 
-    def unit[A](a: A): Par[A] = es => cb => cb(a)
+    def unit[A](a: A): Par[A] = _ => cb => cb(a)
 
     def delay[A](a: => A): Par[A] = es => cb => cb(a)
 
@@ -179,9 +179,14 @@ object Nonblocking:
 
     val l2 = List.fill(1000)(1)
     val pl2 = Par.parMap(l2)(_.toString)
-    val sl2 = pl2.run(es)
+    val rl2 = pl2.run(es)
 
-    println(s"parMap: ${sl2.take(5)}")
+    val l3  = List.range(1, 1000)
+    val pl3 = Par.parMap(l3)(math.sqrt(_))
+    val rl3 = pl3.run(es)
+
+    println(s"parMap: ${rl2.take(5)}")
+    println(s"parMap: ${rl3.take(5)}")
 
     es.shutdown
 
