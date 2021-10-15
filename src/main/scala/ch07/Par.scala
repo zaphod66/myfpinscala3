@@ -15,6 +15,8 @@ object Par:
     def isCancelled = false
     def cancel(evenIfRunning: Boolean): Boolean = false
 
+  extension [A](pa: Par[A]) def map[B](f: A => B) = pa.map2(unit(()))((a, _) => f(a))
+
   extension [A](pa: Par[A]) def map2[B, C](pb: Par[B])(f: (A, B) => C): Par[C] =
     es =>
       val af = pa(es)
@@ -52,6 +54,10 @@ object Par:
   def fork[A](pa: => Par[A]): Par[A] =
     es => es.submit(new Callable[A] { def call = pa(es).get })
 
+  def lazyUnit[A](a: => A): Par[A] = fork(unit(a))
+
+  def asyncF[A, B](f: A => B): A => Par[B] = a => lazyUnit(f(a))
+
   def parSum(ints: List[Int]): Par[Int] =
     val size = ints.size
     if size <= 1000 then
@@ -63,6 +69,35 @@ object Par:
 
       pl.map2Timeout(pr)(_ + _)
     
+  def parSort0(parList: Par[List[Int]]): Par[List[Int]] = parList.map2(unit(()))((a, _) => a.sorted)
+  def parSort(parList: Par[List[Int]]): Par[List[Int]] = parList.map(_.sorted)
+
+  def parMap[A, B](as: List[A])(f: A => B): Par[List[B]] =
+    fork {
+      val pbs: List[Par[B]] = as.map(asyncF(f))
+      Par.sequence(pbs)
+    }
+
+  def parFilter[A](as: List[A])(p: A => Boolean): Par[List[A]] =
+    fork {
+      val ppas = Par.parMap(as)( a => if p(a) then List(a) else Nil)
+      ppas.map(_.flatten)
+    }
+
+
+  def sequenceBalanced[A](pas: IndexedSeq[Par[A]]): Par[IndexedSeq[A]] =
+    if pas.isEmpty then unit(IndexedSeq.empty[A])
+    else if pas.size == 1 then pas.head.map(IndexedSeq(_))
+    else
+      val (l, r) = pas.splitAt(pas.size / 2)
+      sequenceBalanced(l).map2Timeout(sequenceBalanced(r))(_ ++ _)
+
+  def sequence0[A](ps: List[Par[A]]): Par[List[A]] =
+    ps.foldRight(unit(List.empty[A]))((pa, acc) => pa.map2Timeout(acc)(_ :: _))
+
+  def sequence[A](ps: List[Par[A]]): Par[List[A]] =
+    sequenceBalanced(ps.toIndexedSeq).map(_.toList)
+
   @main
   def run: Unit =
     println(s"runPar")
@@ -77,7 +112,22 @@ object Par:
     val r2 = parSum(l1).run(es).get
     val started3 = System.nanoTime
 
-    println(s"r1: $r1 ${(started2 - started1).toDouble / 1000} ms")
-    println(s"r2: $r2 ${(started3 - started2).toDouble / 1000} ms")
+    println(s"r1: $r1 ${(started2 - started1).toDouble / 1000} µs")
+    println(s"r2: $r2 ${(started3 - started2).toDouble / 1000} µs")
+
+    val i = 42
+    val f: Int => String = _.toString
+    val pf = Par.asyncF(f)
+
+    val s1 = f(i)
+    val s2 = pf(i).run(es).get
+
+    println(s"s1: $s1, s2: $s2")
+
+    val l2 = List.fill(1000)(1)
+    val pl2 = Par.parMap(l2)(_.toString)
+    val sl2 = pl2.run(es).get
+
+    println(s"parMap: ${sl2.take(5)}")
 
     es.shutdown
