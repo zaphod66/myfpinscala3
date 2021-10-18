@@ -61,6 +61,52 @@ object Par:
   
   def asyncF[A, B](f: A => B): A => Par[B] = a => lazyUnit(f(a))
 
+  def choice[A](cond: Par[Boolean])(t: Par[A], f: Par[A]): Par[A] =
+    es => if cond.run(es).get then t(es) else f(es)
+
+  def choiceN[A](n: Par[Int])(choices: List[Par[A]]): Par[A] =
+    es =>
+      val i = n.run(es).get
+      choices(i).run(es)
+  
+  def choiceWithChoiceN[A](p: Par[Boolean])(t: Par[A], f: Par[A]): Par[A] =
+    val pn = p.map(b => if b then 0 else 1)
+    val cs = List(t, f)
+    choiceN(pn)(cs)
+  
+  def choiceMap[K, V](key: Par[K])(choices: Map[K, Par[V]]): Par[V] =
+    es =>
+      val k = key.run(es).get
+      choices(k).run(es)
+
+  extension [A](pa: Par[A]) def chooser[B](choices: A => Par[B]): Par[B] =
+    es =>
+      val a = pa.run(es).get
+      choices(a).run(es)
+
+  extension [A](pa: Par[A]) def flatMap[B](f: A => Par[B]): Par[B] =
+    pa.chooser { f }
+  
+  def choiceWithChooser[A](cond: Par[Boolean])(t: Par[A], f: Par[A]): Par[A] =
+    cond.chooser { b => if b then t else f }
+  
+  def choiceNWithChooser[A](n: Par[Int])(choices: List[Par[A]]): Par[A] =
+    n.chooser { choices }
+
+  def choiseMapWithChooser[K, V](key: Par[K])(choices: Map[K, Par[V]]): Par[V] =
+    key.chooser { choices }
+  
+  def join[A](ppa: Par[Par[A]]): Par[A] =
+    es =>
+      val pa = ppa.run(es).get
+      pa.run(es)
+  
+  def joinWithFlatMap[A](ppa: Par[Par[A]]): Par[A] =
+    ppa.flatMap(identity)
+  
+  def flatMapWithJoin[A, B](pa: Par[A])(f: A => Par[B]): Par[B] =
+    join(pa.map(f))
+
   def parSum(ints: List[Int]): Par[Int] =
     val size = ints.size
     if size <= 1000 then
