@@ -44,7 +44,23 @@ object Prop:
         catch
           case e: Exception => Falsified(buildErrMsg(a, e), i)
     }.find(_.isFalsified).getOrElse(Passed)
+
+  extension (self: Prop)
+    def tag(msg: String): Prop =
+      (n, rng) => self(n, rng) match
+        case Falsified(e, c) => Falsified(FailedCase.fromString(s"$msg($e)"), c)
+        case x => x
   
+    def &&(that: Prop): Prop =
+      (n, rng) => self.tag("and-left")(n, rng) match
+        case Passed | Proved => that.tag("and-right")(n, rng)
+        case x => x
+
+    def ||(that: Prop): Prop =
+      (n, rng) => self.tag("or-left")(n, rng) match
+        case Falsified(msg, _) => that.tag("or-right")(n, rng)
+        case x => x
+
 opaque type Gen[+A] = State[RNG, A]
 
 object Gen:
