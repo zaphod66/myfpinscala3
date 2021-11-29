@@ -9,6 +9,11 @@ opaque type Prop = (TestCases, RNG) => Result
 object Prop:
   opaque type TestCases = Int
   opaque type FailedCase = String
+  object FailedCase:
+    extension (f: FailedCase)
+      def string: String = f
+    def fromString(s: String): FailedCase = s
+
   opaque type SuccessCount = Int
 
   enum Result:
@@ -21,10 +26,25 @@ object Prop:
       case Proved => false
       case Falsified(_, _) => true
 
-// trait Prop:
-//   def check: Either[(FailedCase, SuccessCount), SuccessCount]
-//   def &&(that: Prop): Prop = ???
+  def randomLazyList[A](g: Gen[A])(rng: RNG): LazyList[A] =
+    LazyList.unfold(rng)(rng => Some(g.run(rng)))
 
+  def buildErrMsg[A](a: A, e: Exception): String =
+    s"test case: $a\n" +
+    s"generated an exception: ${e.getMessage}\n" +
+    s"stack trace:\n ${e.getStackTrace.mkString("\n")}"
+
+  import Prop.Result.{Passed, Falsified, Proved}
+
+  def forAll[A](as: Gen[A])(f: A => Boolean): Prop =
+    (n, rng) => randomLazyList(as)(rng).zip(LazyList.from(0)).take(n).map {
+      case (a, i) => 
+        try
+          if f(a) then Passed else Falsified(a.toString, i)
+        catch
+          case e: Exception => Falsified(buildErrMsg(a, e), i)
+    }.find(_.isFalsified).getOrElse(Passed)
+  
 opaque type Gen[+A] = State[RNG, A]
 
 object Gen:
