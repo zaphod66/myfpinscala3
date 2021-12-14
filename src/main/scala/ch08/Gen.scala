@@ -8,6 +8,11 @@ opaque type Prop = (TestCases, RNG) => Result
 
 object Prop:
   opaque type TestCases = Int
+  opaque type MaxSize = Int
+  object MaxSize:
+    extension (x: MaxSize) def toInt = x
+    def fromInt(x: Int): MaxSize = x
+
   opaque type FailedCase = String
   object FailedCase:
     extension (f: FailedCase)
@@ -71,6 +76,11 @@ object Gen:
     def flatMap[B](f: A => Gen[B]): Gen[B] =
       State.flatMap(self)(f)
 
+    def list: SGen[List[A]] =
+      n => listOfN(n)
+    
+    def unsized: SGen[A] = _ => self
+
   def unit[A](a: => A): Gen[A] = State.unit(a)
 
   def choose(start: Int, stopExclusive: Int): Gen[Int] =
@@ -93,3 +103,12 @@ object Gen:
 
   def stringN(len: Int): Gen[String] =
     listOfN(len, choose(0, 127).map(_.toChar)).map(_.mkString)
+
+// Generates samples of a given size
+opaque type SGen[+A] = Int => Gen[A]
+
+object SGen:
+  def apply[A](f: Int => Gen[A]): SGen[A] = f
+
+  def choose(start: Int, stopExclusive: Int): SGen[Int] = n => Gen.choose(start, stopExclusive)
+  def boolean: SGen[Boolean] = n => Gen.boolean
