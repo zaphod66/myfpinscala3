@@ -1,16 +1,21 @@
 package ch08
 
 import ch06.*   // State
+import annotation.targetName
 
 import Prop.* 
 
-opaque type Prop = (TestCases, RNG) => Result
+opaque type Prop = (MaxSize, TestCases, RNG) => Result
 
 object Prop:
   opaque type TestCases = Int
+  object TestCases:
+    extension (x: TestCases) def toInt: Int = x
+    def fromInt(x: Int): TestCases = x
+  
   opaque type MaxSize = Int
   object MaxSize:
-    extension (x: MaxSize) def toInt = x
+    extension (x: MaxSize) def toInt: Int = x
     def fromInt(x: Int): MaxSize = x
 
   opaque type FailedCase = String
@@ -31,6 +36,9 @@ object Prop:
       case Proved => false
       case Falsified(_, _) => true
 
+  def apply(f: (TestCases, RNG) => Result): Prop =
+    (_, n, rng) => f(n, rng)
+  
   def randomLazyList[A](g: Gen[A])(rng: RNG): LazyList[A] =
     LazyList.unfold(rng)(rng => Some(g.run(rng)))
 
@@ -41,7 +49,7 @@ object Prop:
 
   import Prop.Result.{Passed, Falsified, Proved}
 
-  def forAll[A](as: Gen[A])(f: A => Boolean): Prop =
+  def forAll[A](as: Gen[A])(f: A => Boolean): Prop = Prop {
     (n, rng) => randomLazyList(as)(rng).zip(LazyList.from(0)).take(n).map {
       case (a, i) => 
         try
@@ -49,21 +57,32 @@ object Prop:
         catch
           case e: Exception => Falsified(buildErrMsg(a, e), i)
     }.find(_.isFalsified).getOrElse(Passed)
+  }
+
+  @targetName("forAllSized")
+  def forAll[A](g: SGen[A])(f: A => Boolean): Prop =
+    (max, n, rng) =>
+      val casesPerSize = (n.toInt - 1) / max.toInt + 1
+      val props: LazyList[Prop] =
+        LazyList.from(0).take((n.toInt min max.toInt) + 1).map(i => forAll(g(i))(f))
+      val prop: Prop =
+        props.map[Prop](p => (max, n, rng) => p(max, casesPerSize, rng)).toList.reduce(_ && _)
+      prop(max, n, rng)
 
   extension (self: Prop)
-    def tag(msg: String): Prop =
-      (n, rng) => self(n, rng) match
+    def tag(msg: String): Prop = 
+      (max, n, rng) => self(max, n, rng) match
         case Falsified(e, c) => Falsified(FailedCase.fromString(s"$msg($e)"), c)
         case x => x
   
     def &&(that: Prop): Prop =
-      (n, rng) => self.tag("and-left")(n, rng) match
-        case Passed | Proved => that.tag("and-right")(n, rng)
+      (max, n, rng) => self.tag("and-left")(max, n, rng) match
+        case Passed | Proved => that.tag("and-right")(max, n, rng)
         case x => x
 
     def ||(that: Prop): Prop =
-      (n, rng) => self.tag("or-left")(n, rng) match
-        case Falsified(msg, _) => that.tag("or-right")(n, rng)
+      (max, n, rng) => self.tag("or-left")(max, n, rng) match
+        case Falsified(msg, _) => that.tag("or-right")(max, n, rng)
         case x => x
 
 opaque type Gen[+A] = State[RNG, A]
