@@ -85,6 +85,17 @@ object Prop:
         case Falsified(msg, _) => that.tag("or-right")(max, n, rng)
         case x => x
 
+    def run(maxSize: MaxSize = 100,
+            testCases: TestCases = 100,
+            rng: RNG = RNG.Simple(System.currentTimeMillis)): Unit =
+      self(maxSize, testCases, rng) match
+        case Falsified(msg, n) =>
+          println(s"Falsified after $n passed tests: $msg.")
+        case Passed =>
+          println(s"Ok, passed $testCases tests.")
+        case Proved =>
+          println("Ok, proved")
+
 opaque type Gen[+A] = State[RNG, A]
 
 object Gen:
@@ -98,6 +109,9 @@ object Gen:
     def list: SGen[List[A]] =
       n => listOfN(n)
     
+    def nonEmptyList: SGen[List[A]] =
+      n => listOfN(n max 1)
+
     def unsized: SGen[A] = _ => self
 
   def unit[A](a: => A): Gen[A] = State.unit(a)
@@ -131,3 +145,33 @@ object SGen:
 
   def choose(start: Int, stopExclusive: Int): SGen[Int] = n => Gen.choose(start, stopExclusive)
   def boolean: SGen[Boolean] = n => Gen.boolean
+
+object Tests:
+  val smallInt = Gen.choose(-10, 10)
+
+  val maxProp1 = Prop.forAll(smallInt.list) { ns =>
+    val max = (ns).max
+    !ns.exists(_ > max)
+  }
+
+  val maxProp2 = Prop.forAll(smallInt.nonEmptyList) { ns =>
+    val max = (ns).max
+    !ns.exists(_ > max)
+  }
+
+  val sortedProp = Prop.forAll(smallInt.list) { ns =>
+    val ls = ns.sorted
+    val ordered = ns.isEmpty || ls.zip(ls.tail).forall { (a, b) => a <= b }
+
+    ordered && ns.forall(ls.contains) && ls.forall(ns.contains)
+  }
+
+  @main
+  def runProps: Unit =
+    println("run Props")
+
+    maxProp1.run()  //(MaxSize.fromInt(10), TestCases.fromInt(10), RNG.Simple(42))
+    println("--------------")
+    maxProp2.run()
+    println("--------------")
+    sortedProp.run()
