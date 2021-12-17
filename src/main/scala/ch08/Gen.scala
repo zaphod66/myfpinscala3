@@ -1,9 +1,14 @@
 package ch08
 
 import ch06.*   // State
+import ch07.Par // Parallelism
+
 import annotation.targetName
 
 import Prop.* 
+import Gen.*
+
+import java.util.concurrent.{ExecutorService, Executors}
 
 opaque type Prop = (MaxSize, TestCases, RNG) => Result
 
@@ -69,6 +74,23 @@ object Prop:
         props.map[Prop](p => (max, n, rng) => p(max, casesPerSize, rng)).toList.reduce(_ && _)
       prop(max, n, rng)
 
+  def check(p: => Boolean): Prop =
+    (_, _, _) => if p then Proved else Falsified("check", 0)
+
+  val executors: Gen[ExecutorService] = weighted(
+    choose(1, 4).map(Executors.newFixedThreadPool) -> .75,
+    unit(Executors.newCachedThreadPool) -> .25
+  )
+
+  // def forAllPar[A](g: Gen[A])(f: A => Par[Boolean]): Prop =
+  //   forAll(executors ** g)((e, a) => f(a).run(e).get)
+
+  def forAllPar[A](g: Gen[A])(f: A => Par[Boolean]): Prop =
+    forAll(executors ** g) { case e ** a => f(a).run(e).get }
+
+  def checkPar(p: Par[Boolean]): Prop =
+    forAllPar(Gen.unit(()))(_ => p)
+  
   extension (self: Prop)
     def tag(msg: String): Prop = 
       (max, n, rng) => self(max, n, rng) match
@@ -103,6 +125,12 @@ object Gen:
     def listOfN(n: Int): Gen[List[A]] =
       Gen.listOfN(n, self)
 
+    def map[B](f: A => B): Gen[B] =
+      State.map(self)(f)
+    
+    def map2[B, C](that: Gen[B])(f: (A, B) => C): Gen[C] =
+      State.map2(self)(that)(f)
+
     def flatMap[B](f: A => Gen[B]): Gen[B] =
       State.flatMap(self)(f)
 
@@ -113,6 +141,9 @@ object Gen:
       n => listOfN(n max 1)
 
     def unsized: SGen[A] = _ => self
+
+    @targetName("product")
+    def **[B](gb: Gen[B]): Gen[(A, B)] = map2(gb)((_, _))
 
   def unit[A](a: => A): Gen[A] = State.unit(a)
 
@@ -131,12 +162,18 @@ object Gen:
   def union[A](g1: Gen[A], g2: Gen[A]): Gen[A] =
     boolean.flatMap(b => if (b) g1 else g2)
 
+  def weighted[A](g1: (Gen[A], Double), g2: (Gen[A], Double)): Gen[A] =
+    val g1Threshold = g1._2.abs / (g1._2.abs + g2._2.abs)
+    State(RNG.double).flatMap(d => if d < g1Threshold then g1._1 else g2._1)
+
   def pair[A](g: Gen[A]): Gen[(A, A)] =
     State.map2(g)(g){ (a1, a2) => (a1, a2) }
 
   def stringN(len: Int): Gen[String] =
     listOfN(len, choose(0, 127).map(_.toChar)).map(_.mkString)
 
+  object ** :
+    def unapply[A, B](p: (A, B)) = Some(p)
 // Generates samples of a given size
 opaque type SGen[+A] = Int => Gen[A]
 
@@ -166,6 +203,31 @@ object Tests:
     ordered && ns.forall(ls.contains) && ls.forall(ns.contains)
   }
 
+  val executor: ExecutorService = Executors.newCachedThreadPool
+  
+  val parProp1 = check {
+    val p1 = Par.unit(1).map(_ + 1)
+    val p2 = Par.unit(2)
+    p1.run(executor).get == p2.run(executor).get
+  }
+
+  def eq[A](p1: Par[A], p2: Par[A]): Par[Boolean] =
+    p1.map2(p2)(_ == _)
+  
+  val parProp2 = check {
+    eq(
+      p1 = Par.unit(1).map(_ + 1),
+      p2 = Par.unit(2)
+    ).run(executor).get
+  }
+
+  val parProp3 = checkPar {
+    eq (
+      Par.unit(1).map(_ + 1),
+      Par.unit(2)
+    )
+  }
+
   @main
   def runProps: Unit =
     println("run Props")
@@ -175,3 +237,9 @@ object Tests:
     maxProp2.run()
     println("--------------")
     sortedProp.run()
+    println("--------------")
+    parProp1.run()
+    println("--------------")
+    parProp2.run()
+    println("--------------")
+    parProp3.run()
